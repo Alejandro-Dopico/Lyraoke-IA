@@ -1,0 +1,30 @@
+# Ignorar todo el contenido de estas carpetas excepto .gitkeep
+data/*
+!data/.gitkeep
+
+models/final_model/*
+!models/final_model/.gitkeep
+
+models/fine_tuned/*
+!models/fine_tuned/.gitkeep
+
+output/*
+!output/.gitkeep
+
+songs/*
+!songs/.gitkeep
+
+# Ignorar archivos de entornos virtuales
+venv310/
+
+# Ignorar archivos grandes y temporales (añade estos patrones comunes)
+*.py[cod]
+*__pycache__/
+*.so
+*.egg-info/
+*.swp
+*.bak
+*.tmp
+*.log
+*.cache
+.DS_Store

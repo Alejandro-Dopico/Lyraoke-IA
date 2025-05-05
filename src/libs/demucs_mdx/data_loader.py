@@ -74,14 +74,23 @@ class KaraokeDataset:
             'stems': torch.stack([dummy]*4)
         }
 
-def get_dataloader(root_dir, batch_size=1, num_workers=4):
+def get_dataloader(root_dir, batch_size=1, num_workers=None):
+    """Versión compatible con Windows/Linux y optimizada para GPU"""
     dataset = KaraokeDataset(root_dir)
+    
+    is_windows = os.name == 'nt'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Ajustes automáticos:
+    safe_num_workers = 0 if is_windows else (num_workers if num_workers is not None else os.cpu_count() // 2)
+    pin_memory = not is_windows and device.type == 'cuda'  # Solo activo en GPU + Linux/Mac
+    
     return torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=min(4, num_workers),
-        pin_memory=True,
-        persistent_workers=True,
-        prefetch_factor=2
+        num_workers=safe_num_workers,
+        pin_memory=pin_memory,  # Mejor rendimiento en GPU
+        persistent_workers=not is_windows and safe_num_workers > 0,
+        prefetch_factor=2 if not is_windows and safe_num_workers > 0 else None
     )

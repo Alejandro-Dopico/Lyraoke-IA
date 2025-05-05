@@ -1,0 +1,39 @@
+# ======================
+# Core Demucs + PyTorch (GPU/CPU)
+# ======================
+torch==2.3.1+cu121 --index-url https://download.pytorch.org/whl/cu121 ; sys_platform == 'linux' or platform_machine == 'AMD64'
+torch==2.3.1 ; sys_platform != 'linux' and platform_machine != 'AMD64'
+torchaudio==2.3.1 ; sys_platform != 'linux'
+torchaudio==2.3.1+cu121 ; sys_platform == 'linux'
+torchvision==0.18.1 ; sys_platform != 'linux'
+torchvision==0.18.1+cu121 ; sys_platform == 'linux'
+demucs==4.0.1
+numpy==1.26.4
+dora-search==0.1.12
+
+# ======================
+# Procesamiento de Audio
+# ======================
+librosa==0.10.1
+soundfile==0.12.1 ; python_version < '3.12'
+soundfile>=0.12.1 ; python_version >= '3.12'
+soxr==0.3.7 ; sys_platform == 'linux'
+soxr==0.3.7 ; sys_platform == 'win32' and platform_machine == 'AMD64'
+soxr==0.3.7 ; sys_platform == 'darwin'
+
+# ======================
+# Utilidades Esenciales
+# ======================
+typing_extensions==4.11.0
+tqdm==4.66.1
+requests==2.31.0git init
+# ======================
+# Pipeline RAG (Opcional - Descomentar cuando necesites)
+# ======================
+# transformers==4.40.1  # Actualizado para PyTorch 2.3+
+# openai-whisper==20231117
+# langchain==0.1.16  # Versión estable más reciente
+# sentence-transformers==2.7.0
+# chromadb==0.4.24
+# faiss-cpu==1.8.0 ; sys_platform != "linux"  # Windows/Mac
+# faiss-gpu==1.8.0 ; sys_platform == "linux" and platform_machine == "x86_64"  # Linux con GPU

@@ -27,6 +27,9 @@ soxr==0.3.7 ; sys_platform == 'darwin'
 typing_extensions==4.11.0
 tqdm==4.66.1
 requests==2.31.0git init
+ffmpeg-python==1.0.0
+pydub==0.25.1
+
 # ======================
 # Pipeline RAG (Opcional - Descomentar cuando necesites)
 # ======================

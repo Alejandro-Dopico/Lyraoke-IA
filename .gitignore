@@ -2,6 +2,8 @@
 data/*
 !data/.gitkeep
 
+src/app
+
 models/final_model/*
 !models/final_model/.gitkeep
 

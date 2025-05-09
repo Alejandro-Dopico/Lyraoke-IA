@@ -19,6 +19,8 @@ songs/*
 # Ignorar archivos de entornos virtuales
 venv310/
 
+src/libs/audio_processing
+
 # Ignorar archivos grandes y temporales (añade estos patrones comunes)
 *.py[cod]
 *__pycache__/

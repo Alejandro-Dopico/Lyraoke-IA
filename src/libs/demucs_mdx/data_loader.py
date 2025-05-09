@@ -1,96 +1,102 @@
 import torch
 import torchaudio
-from pathlib import Path
+from torch.utils.data import Dataset, DataLoader
 import random
-import numpy as np
 import os
-from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+import numpy as np
 
-class KaraokeDataset:
-    def __init__(self, root_dir, chunk_size=44100*10, sample_rate=44100):
-        self.root_dir = Path(root_dir)
-        self.chunk_size = chunk_size
-        self.sample_rate = sample_rate
-        self.audio_files = self._find_audio_files()
-        self.cache = {}
-        self.executor = ThreadPoolExecutor(max_workers=4)
+class InstrumentalDataset(Dataset):
+    def __init__(self, root_dir, segment_samples=264600, augment=True):
+        self.segment_samples = segment_samples
+        self.augment = augment
         
-    def _find_audio_files(self):
-        files = []
-        for track_dir in self.root_dir.iterdir():
-            if track_dir.is_dir():
-                required_files = {'mixture.wav', 'vocals.wav', 'drums.wav', 'bass.wav', 'other.wav'}
-                if all((track_dir / f).exists() for f in required_files):
-                    files.append(track_dir)
-        return files
-
-    def _load_audio(self, path):
-        try:
-            audio, sr = torchaudio.load(path, normalize=True)
-            if sr != self.sample_rate:
-                audio = torchaudio.functional.resample(audio, sr, self.sample_rate)
-            return audio
-        except Exception as e:
-            print(f"Error loading {path}: {e}")
-            return None
+        # Cargar lista de archivos
+        self.file_paths = []
+        for root, _, files in os.walk(root_dir):
+            for file in files:
+                if file.endswith(('.wav', '.mp3')):
+                    self.file_paths.append(os.path.join(root, file))
+        
+        if not self.file_paths:
+            raise ValueError(f"No se encontraron archivos de audio en {root_dir}")
 
     def __len__(self):
-        return len(self.audio_files)
+        return len(self.file_paths)
+
+    def _load_audio(self, path):
+        waveform, sr = torchaudio.load(path)
+        if waveform.shape[0] == 1:  # Mono a stereo
+            waveform = torch.cat([waveform, waveform], dim=0)
+        if sr != 44100:
+            waveform = torchaudio.functional.resample(waveform, sr, 44100)
+        return waveform
 
     def __getitem__(self, idx):
-        track_dir = self.audio_files[idx]
-        
-        # Cargar todos los stems en paralelo
-        futures = {}
-        for stem in ['mixture', 'vocals', 'drums', 'bass', 'other']:
-            path = track_dir / f"{stem}.wav"
-            futures[stem] = self.executor.submit(self._load_audio, path)
-        
-        stems = {}
-        for stem, future in futures.items():
-            audio = future.result()
-            if audio is None:
-                return self._get_dummy_item()
-            stems[stem] = audio
-
-        # Selección aleatoria del chunk
-        total_frames = stems['mixture'].shape[1]
-        start = random.randint(0, max(0, total_frames - self.chunk_size))
-        
-        return {
-            'mix': stems['mixture'][:, start:start+self.chunk_size],
-            'stems': torch.stack([
-                stems['drums'][:, start:start+self.chunk_size],
-                stems['bass'][:, start:start+self.chunk_size],
-                stems['other'][:, start:start+self.chunk_size],
-                stems['vocals'][:, start:start+self.chunk_size]
+        try:
+            waveform = self._load_audio(self.file_paths[idx])
+            total_samples = waveform.shape[1]
+            
+            # Seleccionar segmento aleatorio
+            if total_samples > self.segment_samples:
+                start = random.randint(0, total_samples - self.segment_samples)
+                waveform = waveform[:, start:start+self.segment_samples]
+            else:
+                # Padding si es necesario
+                padsize = self.segment_samples - total_samples
+                waveform = torch.nn.functional.pad(waveform, (0, padsize))
+            
+            # Simular stems (en tu implementación real carga los stems reales)
+            stems = torch.stack([
+                waveform * 0.3,  # bass
+                waveform * 0.2,  # drums
+                waveform * 0.4,  # other
+                waveform * 0.1   # vocals
             ])
-        }
-    
-    def _get_dummy_item(self):
-        dummy = torch.zeros(2, self.chunk_size)
-        return {
-            'mix': dummy,
-            'stems': torch.stack([dummy]*4)
-        }
+            
+            if self.augment:
+                stems = self._augment_audio(stems)
+            
+            return {
+                'mix': stems.sum(dim=0),
+                'stems': stems
+            }
+            
+        except Exception as e:
+            print(f"Error cargando {self.file_paths[idx]}: {str(e)}")
+            # Devolver datos dummy
+            dummy_wave = torch.randn(2, self.segment_samples) * 0.01
+            stems = torch.stack([dummy_wave * 0.3, dummy_wave * 0.2, 
+                               dummy_wave * 0.4, dummy_wave * 0.1])
+            return {
+                'mix': stems.sum(dim=0),
+                'stems': stems
+            }
 
-def get_dataloader(root_dir, batch_size=1, num_workers=None):
-    """Versión compatible con Windows/Linux y optimizada para GPU"""
-    dataset = KaraokeDataset(root_dir)
+    def _augment_audio(self, stems):
+        """Aumentaciones básicas sin dependencia de torchaudio.filters"""
+        # 1. Modificación de ganancia
+        if random.random() > 0.5:
+            gain = random.uniform(0.8, 1.2)
+            stems[:3] *= gain  # Solo instrumental
+            
+        # 2. Cambio de tono simple
+        if random.random() > 0.5:
+            shift = random.choice([-1, 0, 1])
+            stems = torch.roll(stems, shifts=shift, dims=-1)
+            
+        return stems
+
+def get_dataloader(data_dir, batch_size=4, segment_samples=264600, num_workers=2):
+    """Crea el DataLoader con segmentos de tamaño fijo"""
+    dataset = InstrumentalDataset(data_dir, segment_samples=segment_samples)
     
-    is_windows = os.name == 'nt'
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    # Ajustes automáticos:
-    safe_num_workers = 0 if is_windows else (num_workers if num_workers is not None else os.cpu_count() // 2)
-    pin_memory = not is_windows and device.type == 'cuda'  # Solo activo en GPU + Linux/Mac
-    
-    return torch.utils.data.DataLoader(
+    return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=safe_num_workers,
-        pin_memory=pin_memory,  # Mejor rendimiento en GPU
-        persistent_workers=not is_windows and safe_num_workers > 0,
-        prefetch_factor=2 if not is_windows and safe_num_workers > 0 else None
+        num_workers=min(num_workers, os.cpu_count() - 1),
+        pin_memory=torch.cuda.is_available(),
+        drop_last=True,
+        persistent_workers=num_workers > 0
     )

@@ -60,7 +60,7 @@ def separate_audio(input_filename: str = None, output_dir: Path = OUTPUT_DIR, mo
         # 4. Cargar modelo con seguridad
         logger.info(f"Cargando modelo: {model_path}")
         try:
-            model = load_model(str(model_path), device, weights_only=True)  # Modo seguro
+            model, _ = load_model(str(model_path), device)
         except:
             logger.warning("Fallando a carga estándar (sin weights_only)")
             model = load_model(str(model_path), device)

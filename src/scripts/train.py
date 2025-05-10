@@ -5,10 +5,11 @@ import logging
 from pathlib import Path
 import yaml
 import os
-from demucs.apply import apply_model
 from src.libs.demucs_mdx.model_utils import load_pretrained_htdemucs, save_checkpoint
 from src.libs.demucs_mdx.data_loader import get_dataloader
 from src.libs.demucs_mdx.audio_metrics import AudioMetricsLoss
+from demucs.apply import apply_model
+
 
 # Configuración de logging
 logging.basicConfig(level=logging.INFO)
@@ -67,10 +68,10 @@ def train():
                     mix = batch['mix'].to(device)
                     stems = batch['stems'].to(device)
                     
-                    # Forward pass usando el modelo directamente
+                    # Forward pass usando apply_model
                     pred_stems = apply_model(model, mix, device=device)
                     
-                    # Calcular pérdida mejorada
+                    # Calcular pérdida
                     loss = loss_fn(pred_stems, stems)
                     
                     # Backward pass
@@ -89,7 +90,6 @@ def train():
                         torch.cuda.empty_cache()
                         continue
                     raise
-                
                 except Exception as e:
                     logger.error(f"Error en batch {batch_idx}: {str(e)}")
                     continue

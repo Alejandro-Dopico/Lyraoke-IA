@@ -17,7 +17,7 @@ songs/*
 !songs/.gitkeep
 
 # Ignorar archivos de entornos virtuales
-venv310/
+venv_lyraoke/
 
 src/libs/audio_processing
 

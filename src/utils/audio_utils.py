@@ -22,7 +22,8 @@ def convert_to_wav(input_path: str, target_sr: int = 44100) -> Tuple[str, int]:
         if sr != target_sr:
             audio = torchaudio.functional.resample(audio, sr, target_sr)
         torchaudio.save(temp_wav, audio, target_sr)
-        return temp_wav, target_sr
+        return Path(temp_wav), target_sr
+
         
     except RuntimeError:
         # Fallback a FFMPEG para formatos complejos
@@ -33,7 +34,8 @@ def convert_to_wav(input_path: str, target_sr: int = 44100) -> Tuple[str, int]:
                 .output(temp_wav, ar=target_sr, ac=2, acodec='pcm_s16le')
                 .run(quiet=True, overwrite_output=True)
             )
-            return temp_wav, target_sr
+            return Path(temp_wav), target_sr
+
         except Exception as e:
             logger.error(f"No se pudo convertir {input_path}: {str(e)}")
             raise

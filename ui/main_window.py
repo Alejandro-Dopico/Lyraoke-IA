@@ -139,7 +139,7 @@ class MainWindow(QMainWindow):
     
     def process_audio(self):
         try:
-            result = self.audio_processor.process_audio(self.current_file)
+            result = self.audio_processor.process_audio(self.current_file, output_base_dir="output")
             self.processing_finished.emit(result)
         except Exception as e:
             print(f"Error processing audio: {e}")

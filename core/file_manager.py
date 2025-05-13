@@ -18,28 +18,13 @@ class FileManager:
 
     @staticmethod
     def save_uploaded_file(file_path, target_dir="songs"):
-        """Guarda un archivo subido y limpia el directorio primero"""
+        """Guarda un archivo subido manteniendo su nombre original y limpia el directorio primero"""
         os.makedirs(target_dir, exist_ok=True)
         FileManager.clear_directory(target_dir)
-        
-        # Generar nombre único para evitar colisiones
-        ext = Path(file_path).suffix
-        new_filename = f"uploaded_song{ext}"
-        target_path = os.path.join(target_dir, new_filename)
-        
+
+        # Mantener el nombre original del archivo
+        original_filename = Path(file_path).name
+        target_path = os.path.join(target_dir, original_filename)
+
         shutil.copy(file_path, target_path)
         return target_path
-
-    @staticmethod
-    def prepare_output_dirs(base_dir="output"):
-        """Crea la estructura de directorios de salida"""
-        dirs = {
-            'stems': os.path.join(base_dir, 'stems'),
-            'lyrics': os.path.join(base_dir, 'lyrics')
-        }
-        
-        for dir_path in dirs.values():
-            os.makedirs(dir_path, exist_ok=True)
-            FileManager.clear_directory(dir_path)
-        
-        return dirs

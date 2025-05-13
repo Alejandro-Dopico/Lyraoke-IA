@@ -7,23 +7,35 @@ from core.file_manager import FileManager
 class AudioProcessor:
     def __init__(self, model_size="medium"):
         self.transcriber = LyricsTranscriber(model_size=model_size)
+        self.file_manager = FileManager()
     
     def process_audio(self, input_path, output_base_dir="output"):
         """
-        Procesamiento completo:
-        1. Gestiona archivos de entrada/salida
-        2. Separa stems
-        3. Transcribe letras
+        Procesamiento completo con manejo correcto de rutas
         """
         try:
+            # Normalizar la ruta de entrada
+            input_path = str(Path(input_path).resolve())  # Convierte a ruta absoluta
+            
+            # Verificar existencia del archivo
+            if not Path(input_path).exists():
+                available_files = "\n".join(
+                    f"- {f.name}" for f in Path("songs").iterdir() if f.is_file()
+                )
+                raise FileNotFoundError(
+                    f"Archivo no encontrado: {input_path}\n"
+                    f"Archivos disponibles en 'songs/':\n{available_files}"
+                )
+
             # 1. Separación de stems
-            stems_result = separate_audio(input_path, os.path.join(output_base_dir, "stems"))
-            if not stems_result:  # Esto no debería ocurrir ya que ahora lanza excepciones
-                raise RuntimeError("Error en la separación de stems")
+            stems_result = separate_audio(
+                input_path=input_path,  # Cambiado a input_path
+                output_dir=Path(output_base_dir) / "stems"
+            )
             
             # 2. Transcripción de letras
-            lyrics_dir = os.path.join(output_base_dir, "lyrics")
-            os.makedirs(lyrics_dir, exist_ok=True)
+            lyrics_dir = Path(output_base_dir) / "lyrics"
+            lyrics_dir.mkdir(exist_ok=True)
             
             lyrics_result = self.transcriber.transcribe_audio(
                 stems_result["vocals"],
@@ -32,15 +44,15 @@ class AudioProcessor:
             
             return {
                 'original': input_path,
-                'original_name': stems_result.get("original_name", Path(input_path).stem),
+                'original_name': Path(input_path).stem,
                 'stems': stems_result,
                 'lyrics': {
                     'text': lyrics_result['text'],
                     'timed_segments': lyrics_result['segments'],
                     'files': {
-                        'txt': os.path.join(lyrics_dir, f"{Path(input_path).stem}_lyrics.txt"),
-                        'json': os.path.join(lyrics_dir, f"{Path(input_path).stem}_timed.json"),
-                        'srt': os.path.join(lyrics_dir, f"{Path(input_path).stem}.srt")
+                        'txt': str(lyrics_dir / f"{Path(input_path).stem}_lyrics.txt"),
+                        'json': str(lyrics_dir / f"{Path(input_path).stem}_timed.json"),
+                        'srt': str(lyrics_dir / f"{Path(input_path).stem}.srt")
                     }
                 }
             }

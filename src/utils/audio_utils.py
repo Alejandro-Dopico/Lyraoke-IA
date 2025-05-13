@@ -6,6 +6,7 @@ import warnings
 from pathlib import Path
 from typing import Union, Tuple
 import os
+import tempfile
 
 def safe_audio_load(path: Union[str, Path]) -> AudioSegment:
     """Carga completamente segura de archivos de audio"""
@@ -88,3 +89,42 @@ def normalize_audio(tensor: torch.Tensor) -> torch.Tensor:
     """Normalización segura del tensor de audio"""
     max_val = tensor.abs().max()
     return tensor / max_val if max_val > 0 else tensor
+
+def load_audio_secure(path: Union[str, Path]) -> AudioSegment:
+    """Carga audio con protección completa"""
+    path = str(Path(path).resolve())
+    
+    # 1. Carga con torchaudio primero
+    try:
+        waveform, sample_rate = torchaudio.load(path)
+        return AudioSegment(
+            waveform.numpy().tobytes(),
+            frame_rate=sample_rate,
+            sample_width=waveform.element_size(),
+            channels=waveform.shape[0]
+        )
+    except:
+        # 2. Fallback a Pydub con protección
+        audio = AudioSegment.from_file(path)
+        return audio._spawn(audio.raw_data)
+
+def export_audio_secure(audio: AudioSegment, path: Union[str, Path]) -> None:
+    """Exportación completamente segura"""
+    path = Path(path)
+    temp_path = f"{tempfile.gettempdir()}/temp_export_{os.getpid()}{path.suffix}"
+    
+    # Exportar a temporal primero
+    audio.export(temp_path, format=path.suffix[1:])
+    
+    # Mover al destino final
+    os.replace(temp_path, str(path))
+
+def convert_to_secure_wav(input_path: Union[str, Path]) -> str:
+    """Conversión a WAV con manejo seguro"""
+    input_path = Path(input_path)
+    temp_path = f"{tempfile.gettempdir()}/{input_path.stem}_secure_{os.getpid()}.wav"
+    
+    audio = load_audio_secure(input_path)
+    export_audio_secure(audio, temp_path)
+    
+    return temp_path

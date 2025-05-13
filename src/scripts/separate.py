@@ -2,6 +2,7 @@ import torch
 import torchaudio
 from pathlib import Path
 import logging
+from pydub import AudioSegment 
 import os
 import shutil
 from typing import Dict, Optional, Union
@@ -11,7 +12,8 @@ from src.utils.audio_utils import (
     convert_to_wav,
     normalize_audio,
     tensor_to_audio_segment,
-    safe_audio_export
+    safe_audio_export,
+    export_audio_secure
 )
 
 # Configuración básica
@@ -163,12 +165,23 @@ def separate_audio(
         instrumental_path = output_dir / "instrumental.wav"
         vocals_path = output_dir / "vocals.wav"
 
-        # Convertir a AudioSegment y exportar
-        instrumental_audio = tensor_to_audio_segment(instrumental, target_sr)
-        vocals_audio = tensor_to_audio_segment(vocals, target_sr)
+        # Dentro de separate_audio():
+        instrumental_audio = AudioSegment(
+            instrumental.numpy().tobytes(),
+            frame_rate=target_sr,
+            sample_width=instrumental.element_size(),
+            channels=2
+        )
 
-        safe_audio_export(instrumental_audio, instrumental_path)
-        safe_audio_export(vocals_audio, vocals_path)
+        vocals_audio = AudioSegment(
+            vocals.numpy().tobytes(),
+            frame_rate=target_sr,
+            sample_width=vocals.element_size(),
+            channels=2
+        )
+
+        export_audio_secure(instrumental_audio, instrumental_path)
+        export_audio_secure(vocals_audio, vocals_path)
 
         logger.info(f"★ Separación completada ★\n"
                    f"- Vocales: {vocals_path}\n"

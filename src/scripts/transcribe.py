@@ -4,7 +4,8 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Optional, Union
-from core.file_manager import FileManager
+import tempfile
+from src.utils.audio_utils import load_audio_secure, export_audio_secure  # Nuevas importaciones
 
 class LyricsTranscriber:
     def __init__(self, model_size: str = "medium"):
@@ -20,83 +21,103 @@ class LyricsTranscriber:
         language: Optional[str] = None
     ) -> Dict:
         """
-        Transcribe audio y guarda resultados en varios formatos
+        Transcribe audio de forma segura y guarda resultados
         
         Args:
             audio_path: Ruta al archivo de audio
-            output_dir: Directorio para guardar resultados (opcional)
-            language: Idioma para transcripción (opcional)
+            output_dir: Directorio para guardar resultados
+            language: Idioma para transcripción
             
         Returns:
-            Dict con resultados de la transcripción y rutas de archivos
+            Dict con resultados y rutas de archivos
         """
-        # Convertir a Path y asegurar directorios
         audio_path = Path(audio_path)
-        if output_dir:
-            output_dir = Path(output_dir)
-            FileManager.prepare_output_dirs(output_dir)
+        temp_file = None
         
-        # Transcribir con Whisper (API actualizada)
-        result = self.model.transcribe(
-            str(audio_path),  # Asegurar string para Whisper
+        try:
+            # 1. Carga segura del audio
+            audio = load_audio_secure(audio_path)
+            
+            # 2. Crear archivo temporal seguro para Whisper
+            temp_file = f"{tempfile.gettempdir()}/whisper_input_{os.getpid()}.wav"
+            export_audio_secure(audio, temp_file)
+            
+            # 3. Transcripción
+            result = self._safe_whisper_transcribe(temp_file, language)
+            
+            # 4. Procesamiento de resultados
+            processed_result = {
+                'text': result['text'],
+                'segments': self._process_segments(result.get('segments', []))
+            }
+            
+            # 5. Guardar resultados si hay output_dir
+            if output_dir:
+                output_dir = Path(output_dir)
+                output_dir.mkdir(parents=True, exist_ok=True)
+                processed_result['files'] = self._save_results(
+                    processed_result, 
+                    audio_path, 
+                    output_dir
+                )
+            
+            return processed_result
+            
+        finally:
+            # Limpieza segura del temporal
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                except:
+                    pass
+    
+    def _safe_whisper_transcribe(self, audio_path: str, language: str) -> Dict:
+        """Wrapper seguro para la transcripción de Whisper"""
+        return self.model.transcribe(
+            audio_path,
             language=language,
             verbose=None,
-            word_timestamps=True  # Parámetro actualizado
+            word_timestamps=True
         )
-        
-        # Procesar resultados para mantener compatibilidad
-        processed_result = {
-            'text': result['text'],
-            'segments': self._process_segments(result.get('segments', []))
-        }
-        
-        # Guardar resultados si se especifica output_dir
-        output_files = {}
-        if output_dir:
-            output_files = self._save_results(processed_result, audio_path, output_dir)
-            processed_result.update({'files': output_files})
-        
-        return processed_result
     
     def _process_segments(self, segments: list) -> list:
         """Procesa segmentos para mantener estructura consistente"""
-        processed = []
-        for segment in segments:
-            processed_segment = {
-                'start': segment['start'],
-                'end': segment['end'],
-                'text': segment['text'],
-                'words': segment.get('words', [])
-            }
-            processed.append(processed_segment)
-        return processed
+        return [{
+            'start': s['start'],
+            'end': s['end'],
+            'text': s['text'],
+            'words': s.get('words', [])
+        } for s in segments]
     
     def _save_results(
         self,
         result: Dict,
-        audio_path: Path,
+        original_path: Path,
         output_dir: Path
     ) -> Dict[str, str]:
-        """Guarda resultados en múltiples formatos"""
-        base_name = audio_path.stem
+        """Guarda resultados en múltiples formatos de forma segura"""
+        base_name = original_path.stem
+        output_files = {}
         
         # 1. Texto plano
         txt_path = output_dir / f"{base_name}_lyrics.txt"
         with open(txt_path, 'w', encoding='utf-8') as f:
             f.write(result['text'])
+        output_files['txt'] = str(txt_path)
         
         # 2. JSON con temporizaciones
         json_path = output_dir / f"{base_name}_timed.json"
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump(result['segments'], f, ensure_ascii=False, indent=2)
+        output_files['json'] = str(json_path)
         
         # 3. Archivo SRT (subtítulos)
         srt_path = output_dir / f"{base_name}.srt"
-        writer = get_writer("srt", str(output_dir))  # Whisper espera string
-        writer(result, str(audio_path))  # Asegurar string para Whisper
+        try:
+            writer = get_writer("srt", str(output_dir))
+            writer(result, str(original_path))
+            output_files['srt'] = str(srt_path)
+        except Exception as e:
+            print(f"Warning: Error generando SRT: {str(e)}")
         
-        return {
-            'txt': str(txt_path),
-            'json': str(json_path),
-            'srt': str(srt_path)
-        }
+        return output_files

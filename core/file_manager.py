@@ -2,6 +2,7 @@ import os
 import shutil
 from pathlib import Path
 import glob
+from typing import Union  # Añade esta importación
 
 class FileManager:
     @staticmethod
@@ -28,3 +29,12 @@ class FileManager:
 
         shutil.copy(file_path, target_path)
         return target_path
+    
+    @staticmethod
+    def prepare_output_dirs(base_dir: Union[str, Path]) -> Path:  # Quita el 'self' aquí
+        """Prepara los directorios de salida y devuelve la ruta base"""
+        base_path = Path(base_dir)
+        base_path.mkdir(parents=True, exist_ok=True)
+        (base_path / "stems").mkdir(exist_ok=True)
+        (base_path / "lyrics").mkdir(exist_ok=True)
+        return base_path

@@ -1,44 +1,90 @@
-import os
-import tempfile
 import torchaudio
 import torch
-import ffmpeg
+from pydub import AudioSegment
+import numpy as np
+import warnings
 from pathlib import Path
-import logging
+from typing import Union, Tuple
+import os
 
-logger = logging.getLogger(__name__)
-
-def convert_to_wav(input_path: Path) -> tuple[str, str]:
-    """Convierte cualquier archivo de audio a WAV temporal"""
+def safe_audio_load(path: Union[str, Path]) -> AudioSegment:
+    """Carga completamente segura de archivos de audio"""
+    path = str(Path(path).resolve())
+    
+    # Primero cargamos con torchaudio para decodificación precisa
     try:
-        # Verificar que es un archivo, no directorio
-        if not input_path.is_file():
-            raise ValueError(f"La ruta no es un archivo: {input_path}")
-        
-        # Crear archivo temporal
-        temp_dir = tempfile.mkdtemp()
-        output_path = os.path.join(temp_dir, f"temp_{input_path.stem}.wav")
-        
-        # Conversión con ffmpeg
-        (
-            ffmpeg.input(str(input_path))
-            .output(output_path, acodec='pcm_s16le', ar='44100', ac=2)
-            .run(quiet=True, overwrite_output=True)
-        )
-        
-        return output_path, temp_dir
+        tensor, sr = torchaudio.load(path)
+        return tensor_to_audio_segment(tensor, sr)
+    except:
+        # Fallback a Pydub si torchaudio falla
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            audio = AudioSegment.from_file(path)
+            return audio._spawn(audio.raw_data)
+
+def safe_audio_export(
+    audio: AudioSegment, 
+    output_path: Union[str, Path],
+    format: str = None,
+    bitrate: str = None
+) -> None:
+    """Exportación ultra-segura de audio"""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    format = format or output_path.suffix[1:]
+    if format == 'mp3' and not bitrate:
+        bitrate = '320k'
+    
+    # Crear copia completamente limpia
+    clean_audio = audio._spawn(audio.raw_data)
+    clean_audio.frame_rate = audio.frame_rate
+    clean_audio.sample_width = audio.sample_width
+    clean_audio.channels = audio.channels
+    
+    # Exportar con manejo de errores
+    try:
+        args = {'format': format}
+        if bitrate:
+            args['bitrate'] = bitrate
+            
+        clean_audio.export(str(output_path), **args)
     except Exception as e:
-        logger.error(f"Error al convertir {input_path} a WAV: {str(e)}")
-        if 'temp_dir' in locals() and os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-        raise
+        raise RuntimeError(f"Error exporting audio: {str(e)}")
 
-def normalize_audio(audio: torch.Tensor) -> torch.Tensor:
-    """Normaliza el audio a rango [-1, 1]"""
-    return audio / audio.abs().max()
+def tensor_to_audio_segment(
+    tensor: torch.Tensor,
+    sample_rate: int
+) -> AudioSegment:
+    """Conversión segura de tensor a AudioSegment"""
+    np_audio = tensor.squeeze().numpy()
+    
+    # Normalización adicional
+    if np_audio.max() > 1.0 or np_audio.min() < -1.0:
+        np_audio = np.clip(np_audio, -1.0, 1.0)
+    
+    return AudioSegment(
+        np_audio.tobytes(),
+        frame_rate=sample_rate,
+        sample_width=np_audio.dtype.itemsize,
+        channels=1 if len(np_audio.shape) == 1 else 2
+    )
 
-def ensure_2d(audio: torch.Tensor) -> torch.Tensor:
-    """Asegura que el audio sea 2D (canales, muestras)"""
-    if audio.dim() == 1:
-        return audio.unsqueeze(0)
-    return audio
+def convert_to_wav(input_path: Union[str, Path]) -> Tuple[str, str]:
+    """Conversión a WAV con manejo completo de errores"""
+    input_path = Path(input_path)
+    temp_file = f"/tmp/{input_path.stem}_temp_{os.getpid()}.wav"
+    
+    try:
+        audio = safe_audio_load(input_path)
+        safe_audio_export(audio, temp_file, format='wav')
+        return temp_file, temp_file
+    except Exception as e:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        raise RuntimeError(f"Error converting to WAV: {str(e)}")
+
+def normalize_audio(tensor: torch.Tensor) -> torch.Tensor:
+    """Normalización segura del tensor de audio"""
+    max_val = tensor.abs().max()
+    return tensor / max_val if max_val > 0 else tensor

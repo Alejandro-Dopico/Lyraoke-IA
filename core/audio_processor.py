@@ -1,62 +1,46 @@
 import os
 from pathlib import Path
+from typing import Dict, Union
 from src.scripts.separate import separate_audio
 from src.scripts.transcribe import LyricsTranscriber
-from core.file_manager import FileManager
+from src.utils.audio_utils import safe_audio_load, safe_audio_export  # Nueva importación
 
 class AudioProcessor:
     def __init__(self, model_size="medium"):
         self.transcriber = LyricsTranscriber(model_size=model_size)
-        self.file_manager = FileManager()
-    
-    def process_audio(self, input_path, output_base_dir="output"):
-        """
-        Procesamiento completo con manejo correcto de rutas
-        """
-        try:
-            # Normalizar la ruta de entrada
-            input_path = str(Path(input_path).resolve())  # Convierte a ruta absoluta
-            
-            # Verificar existencia del archivo
-            if not Path(input_path).exists():
-                available_files = "\n".join(
-                    f"- {f.name}" for f in Path("songs").iterdir() if f.is_file()
-                )
-                raise FileNotFoundError(
-                    f"Archivo no encontrado: {input_path}\n"
-                    f"Archivos disponibles en 'songs/':\n{available_files}"
-                )
 
+    def process_audio(self, input_path: Union[str, Path], output_base_dir: str = "output") -> Dict:
+        try:
+            input_path = Path(input_path).resolve()
+            
             # 1. Separación de stems
             stems_result = separate_audio(
-                input_path=input_path,  # Cambiado a input_path
+                input_path=input_path,
                 output_dir=Path(output_base_dir) / "stems"
             )
+
+            # 2. Carga segura para transcripción
+            from src.utils.audio_utils import safe_audio_load
+            vocals_audio = safe_audio_load(stems_result["vocals"])
             
-            # 2. Transcripción de letras
-            lyrics_dir = Path(output_base_dir) / "lyrics"
-            lyrics_dir.mkdir(exist_ok=True)
+            # 3. Guardado temporal seguro si es necesario
+            temp_vocals = Path(output_base_dir) / "temp_vocals.wav"
+            safe_audio_export(vocals_audio, temp_vocals)
             
+            # 4. Transcripción
             lyrics_result = self.transcriber.transcribe_audio(
-                stems_result["vocals"],
-                output_dir=lyrics_dir
+                str(temp_vocals),
+                output_dir=Path(output_base_dir) / "lyrics"
             )
+
+            # Limpieza
+            temp_vocals.unlink(missing_ok=True)
             
             return {
-                'original': input_path,
-                'original_name': Path(input_path).stem,
+                'original': str(input_path),
                 'stems': stems_result,
-                'lyrics': {
-                    'text': lyrics_result['text'],
-                    'timed_segments': lyrics_result['segments'],
-                    'files': {
-                        'txt': str(lyrics_dir / f"{Path(input_path).stem}_lyrics.txt"),
-                        'json': str(lyrics_dir / f"{Path(input_path).stem}_timed.json"),
-                        'srt': str(lyrics_dir / f"{Path(input_path).stem}.srt")
-                    }
-                }
+                'lyrics': lyrics_result
             }
-            
         except Exception as e:
-            print(f"Error en el procesamiento de audio: {str(e)}")
+            print(f"Error en procesamiento: {str(e)}")
             raise

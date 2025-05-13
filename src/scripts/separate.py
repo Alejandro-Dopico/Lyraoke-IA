@@ -7,7 +7,12 @@ import shutil
 from typing import Dict, Optional, Union
 from src.libs.demucs_mdx.model_utils import load_model
 from demucs.apply import apply_model
-from src.utils.audio_utils import convert_to_wav, normalize_audio
+from src.utils.audio_utils import (
+    convert_to_wav,
+    normalize_audio,
+    tensor_to_audio_segment,
+    safe_audio_export
+)
 
 # Configuración básica
 logging.basicConfig(level=logging.INFO)
@@ -144,7 +149,7 @@ def separate_audio(
         instrumental = ensure_proper_shape(instrumental.cpu())
         vocals = ensure_proper_shape(vocals.cpu())
 
-        # 8. Guardar resultados
+        # 8. Guardar resultados (VERSIÓN CORREGIDA)
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Limpiar archivos antiguos
@@ -158,14 +163,17 @@ def separate_audio(
         instrumental_path = output_dir / "instrumental.wav"
         vocals_path = output_dir / "vocals.wav"
 
-        torchaudio.save(str(instrumental_path), instrumental, target_sr)
-        torchaudio.save(str(vocals_path), vocals, target_sr)
+        # Convertir a AudioSegment y exportar
+        instrumental_audio = tensor_to_audio_segment(instrumental, target_sr)
+        vocals_audio = tensor_to_audio_segment(vocals, target_sr)
+
+        safe_audio_export(instrumental_audio, instrumental_path)
+        safe_audio_export(vocals_audio, vocals_path)
 
         logger.info(f"★ Separación completada ★\n"
-                   f"- Entrada: {input_path.name}\n"
-                   f"- Salida: {output_dir}\n"
-                   f"- Instrumental: {instrumental_path}\n"
-                   f"- Vocales: {vocals_path}")
+                   f"- Vocales: {vocals_path}\n"
+                   f"- Instrumental: {instrumental_path}")
+        
         
         return {
             "vocals": str(vocals_path),

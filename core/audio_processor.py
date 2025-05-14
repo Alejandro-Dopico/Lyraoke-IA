@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, Union
 from src.scripts.separate import separate_audio
 from src.scripts.transcribe import LyricsTranscriber
-from src.utils.audio_utils import safe_audio_load, safe_audio_export  # Nueva importación
+from src.utils.audio_utils import safe_audio_load, save_temp_audio  # Nueva importación
 
 class AudioProcessor:
     def __init__(self, model_size="medium"):
@@ -20,12 +20,11 @@ class AudioProcessor:
             )
 
             # 2. Carga segura para transcripción
-            from src.utils.audio_utils import safe_audio_load
             vocals_audio = safe_audio_load(stems_result["vocals"])
             
-            # 3. Guardado temporal seguro si es necesario
-            temp_vocals = Path(output_base_dir) / "temp_vocals.wav"
-            safe_audio_export(vocals_audio, temp_vocals)
+            # 3. Guardado temporal seguro
+            from src.utils.audio_utils import save_temp_audio
+            temp_vocals = save_temp_audio(vocals_audio)
             
             # 4. Transcripción
             lyrics_result = self.transcriber.transcribe_audio(

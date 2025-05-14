@@ -2,18 +2,15 @@ import torch
 import torchaudio
 from pathlib import Path
 import logging
-from pydub import AudioSegment 
 import os
 import shutil
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, Tuple
 from src.libs.demucs_mdx.model_utils import load_model
 from demucs.apply import apply_model
 from src.utils.audio_utils import (
     convert_to_wav,
     normalize_audio,
-    tensor_to_audio_segment,
-    safe_audio_export,
-    export_audio_secure
+    save_audio  # Nueva función importada
 )
 
 # Configuración básica
@@ -41,9 +38,9 @@ def ensure_proper_shape(audio: torch.Tensor) -> torch.Tensor:
     - Convierte mono a estéreo si es necesario
     """
     if audio.dim() == 3:  # (batch, channels, samples)
-        audio = audio.squeeze(0)  # Eliminar dimensión batch
+        audio = audio.squeeze(0)
     elif audio.dim() == 1:  # (samples)
-        audio = audio.unsqueeze(0)  # Convertir a (1, samples)
+        audio = audio.unsqueeze(0)
     
     # Convertir mono a estéreo si es necesario
     if audio.shape[0] == 1:
@@ -52,7 +49,7 @@ def ensure_proper_shape(audio: torch.Tensor) -> torch.Tensor:
     return audio
 
 def separate_audio(
-    input_path: Optional[Union[str, Path]] = None,  # Cambiado de input_filename a input_path
+    input_path: Optional[Union[str, Path]] = None,
     output_dir: Union[str, Path] = OUTPUT_DIR,
     model_path: Union[str, Path] = MODEL_PATH
 ) -> Dict[str, str]:
@@ -73,7 +70,6 @@ def separate_audio(
             input_filename = get_first_song()
             input_path = SONGS_DIR / input_filename
         elif not input_path.is_absolute():
-            # Si es relativa, verificar si ya incluye 'songs/'
             if str(input_path).startswith("songs/"):
                 input_path = BASE_DIR / input_path
             else:
@@ -127,7 +123,6 @@ def separate_audio(
         logger.info(f"Cargando modelo: {model_path}")
         try:
             model = load_model(str(model_path), device)
-            # Si devuelve una tupla, tomar solo el modelo
             if isinstance(model, tuple):
                 model = model[0]
         except Exception as e:
@@ -151,42 +146,24 @@ def separate_audio(
         instrumental = ensure_proper_shape(instrumental.cpu())
         vocals = ensure_proper_shape(vocals.cpu())
 
-        # 8. Guardar resultados (VERSIÓN CORREGIDA)
+        # 8. Guardar resultados usando la función segura de audio_utils
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Limpiar archivos antiguos
         for old_file in output_dir.glob("*.wav"):
-            try:
-                old_file.unlink()
-            except Exception as e:
-                logger.warning(f"No se pudo eliminar archivo antiguo: {str(e)}")
+            old_file.unlink(missing_ok=True)
 
         # Rutas de salida
         instrumental_path = output_dir / "instrumental.wav"
         vocals_path = output_dir / "vocals.wav"
 
-        # Dentro de separate_audio():
-        instrumental_audio = AudioSegment(
-            instrumental.numpy().tobytes(),
-            frame_rate=target_sr,
-            sample_width=instrumental.element_size(),
-            channels=2
-        )
-
-        vocals_audio = AudioSegment(
-            vocals.numpy().tobytes(),
-            frame_rate=target_sr,
-            sample_width=vocals.element_size(),
-            channels=2
-        )
-
-        export_audio_secure(instrumental_audio, instrumental_path)
-        export_audio_secure(vocals_audio, vocals_path)
+        # Usar la nueva función save_audio de audio_utils
+        save_audio(instrumental, instrumental_path, target_sr)
+        save_audio(vocals, vocals_path, target_sr)
 
         logger.info(f"★ Separación completada ★\n"
                    f"- Vocales: {vocals_path}\n"
                    f"- Instrumental: {instrumental_path}")
-        
         
         return {
             "vocals": str(vocals_path),

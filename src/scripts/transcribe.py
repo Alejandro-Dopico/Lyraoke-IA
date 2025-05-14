@@ -66,15 +66,52 @@ class LyricsTranscriber:
             raise
 
     def _save_results(self, result: Dict, base_name: str, output_dir: Path):
-        """Guarda los resultados en archivos"""
+        """Guarda los resultados en archivos con formato consistente"""
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Archivo de texto
+        # Archivo de texto simple
         txt_path = output_dir / f"{base_name}_lyrics.txt"
         with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write(result['text'])
+            f.write(result.get('text', ''))
         
-        # Archivo JSON con tiempos
+        # Archivo JSON con formato optimizado
         json_path = output_dir / f"{base_name}_timed.json"
         with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(result['segments'], f, ensure_ascii=False, indent=2)
+            segments = []
+            
+            for segment in result.get('segments', []):
+                # Validar y limpiar cada segmento
+                if not isinstance(segment, dict):
+                    continue
+                    
+                words = segment.get('words', [])
+                if not isinstance(words, list):
+                    continue
+                    
+                # Filtrar palabras inválidas
+                valid_words = []
+                for word in words:
+                    if (isinstance(word, dict) and 
+                        'word' in word and 
+                        'start' in word and 
+                        isinstance(word.get('start'), (int, float))):
+                        
+                        # Crear palabra con datos limpios
+                        clean_word = {
+                            'word': word['word'].strip(),
+                            'start': float(word['start']),
+                            'end': float(word.get('end', word['start'] + 1.0)),
+                            'probability': float(word.get('probability', 0.0))
+                        }
+                        valid_words.append(clean_word)
+                
+                if valid_words:
+                    segments.append({
+                        'id': int(segment.get('id', 0)),
+                        'start': float(segment.get('start', 0)),
+                        'end': float(segment.get('end', 0)),
+                        'text': segment.get('text', '').strip(),
+                        'words': valid_words
+                    })
+            
+            json.dump(segments, f, ensure_ascii=False, indent=2)

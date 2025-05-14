@@ -16,6 +16,8 @@ output/*
 songs/*
 !songs/.gitkeep
 
+whisper/
+
 # Ignorar archivos de entornos virtuales
 venv_lyraoke/
 

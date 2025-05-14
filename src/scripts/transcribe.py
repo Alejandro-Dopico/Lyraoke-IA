@@ -50,8 +50,10 @@ class LyricsTranscriber:
             # Procesar resultados
             processed = {
                 'text': result.get('text', ''),
-                'segments': result.get('segments', [])
+                'segments': result.get('segments', []),
+                'timed_segments': result.get('segments', [])
             }
+
 
             # Guardar resultados si se especifica directorio
             if output_dir:

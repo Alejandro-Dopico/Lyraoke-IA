@@ -1,17 +1,16 @@
-import sys
 from PyQt5.QtWidgets import QApplication
 from ui.main_window import MainWindow
+from ui.styles import get_stylesheet
+import sys
 
 def main():
-    # Configurar aplicación
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')  # Mejor aspecto en todos los sistemas
+    app.setStyle('Fusion')
+    app.setStyleSheet(get_stylesheet())  # Aplicar estilos
     
-    # Crear y mostrar ventana principal
     window = MainWindow()
     window.show()
     
-    # Ejecutar aplicación
     sys.exit(app.exec_())
 
 if __name__ == "__main__":

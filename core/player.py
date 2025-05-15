@@ -17,7 +17,7 @@ class KaraokePlayer(QMediaPlayer):
         super().__init__(parent)
         self._timed_lyrics: List[Dict] = []
         self._current_segment_index: int = 0
-        self._lyrics_update_timer = QTimer()
+        self._lyrics_update_timer = QTimer(self)
         self._lyrics_update_timer.setInterval(100)  # 100ms
         self._lyrics_update_timer.timeout.connect(self._update_lyrics_display)
         self._temp_files = []
@@ -44,7 +44,7 @@ class KaraokePlayer(QMediaPlayer):
             self._current_segment_index = 0
             self.lyrics_updated.emit("", 0.0, [])
 
-    def load_audio(self, audio_path: str):
+    def load_audio(self, audio_path: str) -> bool:
         """Carga y convierte el audio a formato compatible"""
         try:
             path = Path(audio_path)
@@ -87,7 +87,6 @@ class KaraokePlayer(QMediaPlayer):
             with open(json_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 
-                # Verificación profunda de la estructura
                 if not isinstance(data, list):
                     raise ValueError("El archivo JSON no contiene una lista de segmentos")
                 
@@ -96,7 +95,6 @@ class KaraokePlayer(QMediaPlayer):
                     if not isinstance(segment, dict):
                         continue
                     
-                    # Verificar campos esenciales
                     if 'words' not in segment or not isinstance(segment['words'], list):
                         continue
                     
@@ -104,7 +102,6 @@ class KaraokePlayer(QMediaPlayer):
                     if not segment_text:
                         continue
                     
-                    # Procesar cada palabra con validación
                     for word in segment['words']:
                         if not isinstance(word, dict):
                             continue
@@ -112,39 +109,30 @@ class KaraokePlayer(QMediaPlayer):
                         if 'word' not in word or 'start' not in word:
                             continue
                         
-                        # Asegurar que los tiempos sean números válidos
                         try:
                             start = float(word['start'])
-                            end = float(word.get('end', start + 1.0))  # Valor por defecto si no hay 'end'
+                            end = float(word.get('end', start + 1.0))
+                            clean_word = {
+                                'word': str(word['word']).strip(),
+                                'start': start,
+                                'end': end,
+                                'segment_text': segment_text
+                            }
+                            if clean_word['word']:
+                                self._timed_lyrics.append(clean_word)
                         except (TypeError, ValueError):
                             continue
-                        
-                        # Crear entrada de palabra con datos limpios
-                        clean_word = {
-                            'word': str(word['word']).strip(),
-                            'start': start,
-                            'end': end,
-                            'segment_text': segment_text
-                        }
-                        
-                        if clean_word['word']:  # Solo añadir si hay texto
-                            self._timed_lyrics.append(clean_word)
                 
                 if not self._timed_lyrics:
                     raise ValueError("El archivo no contiene palabras válidas con tiempos")
                 
-                # Ordenar las palabras por tiempo de inicio
                 self._timed_lyrics.sort(key=lambda x: x['start'])
                 self._current_segment_index = 0
                 return True
                 
-        except json.JSONDecodeError as e:
-            error_msg = f"Error de sintaxis en el JSON: {str(e)}"
         except Exception as e:
-            error_msg = f"Error al procesar letras: {str(e)}"
-        
-        QMessageBox.warning(None, "Error", f"No se pudieron cargar las letras: {error_msg}")
-        return False
+            QMessageBox.warning(None, "Error", f"No se pudieron cargar las letras: {str(e)}")
+            return False
 
     def play(self):
         """Inicia reproducción con sincronización de letras"""
@@ -172,27 +160,35 @@ class KaraokePlayer(QMediaPlayer):
         
         current_time = self.position() / 1000  # Convertir a segundos
         
-        # Encontrar segmento actual
-        current_segment = None
+        # Buscar la palabra actual
+        current_word = None
         for i, word in enumerate(self._timed_lyrics):
-            if word['start'] <= current_time <= word.get('end', word['start'] + 1):
-                current_segment = word
+            if word['start'] <= current_time <= word.get('end', word['start'] + 0.5):
+                current_word = word
                 self._current_segment_index = i
                 break
         
-        if current_segment:
-            # Obtener contexto (3 líneas)
-            context_lines = []
-            start_idx = max(0, self._current_segment_index - 1)
-            end_idx = min(len(self._timed_lyrics), self._current_segment_index + 2)
-            
-            for i in range(start_idx, end_idx):
-                text = self._timed_lyrics[i].get('segment_text', '')
-                if text and text not in context_lines:
-                    context_lines.append(text)
-            
-            self.lyrics_updated.emit(
-                current_segment.get('word', ''),
-                current_time,
-                context_lines
-            )
+        if not current_word:
+            return
+        
+        # Obtener 3 líneas de contexto (anterior, actual, siguiente)
+        context_lines = []
+        current_segment_text = current_word['segment_text']
+        
+        # Buscar segmentos adyacentes
+        segments = []
+        for word in self._timed_lyrics:
+            if word['segment_text'] not in segments:
+                segments.append(word['segment_text'])
+        
+        current_index = segments.index(current_segment_text)
+        start_idx = max(0, current_index - 1)
+        end_idx = min(len(segments), current_index + 2)
+        
+        context_lines = segments[start_idx:end_idx]
+        
+        self.lyrics_updated.emit(
+            current_word['word'],
+            current_time,
+            context_lines
+        )

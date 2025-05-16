@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Rutas fijas
 BASE_DIR = Path(__file__).parent.parent.parent
-SONGS_DIR = BASE_DIR / "songs"
+SONGS_DIR = BASE_DIR / "output" / "original"
 OUTPUT_DIR = BASE_DIR / "output" / "stems"
 MODEL_PATH = BASE_DIR / "models" / "final_model" / "best_model.pth"
 

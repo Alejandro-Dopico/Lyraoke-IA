@@ -90,3 +90,4 @@ treetable==0.2.5
 triton==2.3.1
 typing_extensions==4.12.2
 urllib3==2.4.0
+Wave==0.0.2

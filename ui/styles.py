@@ -22,7 +22,7 @@ def get_stylesheet():
     
     QPushButton {
         background-color: #4a4a4a;
-        color: white;
+        color: #ffffff;
         border: none;
         padding: 8px 16px;
         border-radius: 4px;
@@ -44,14 +44,14 @@ def get_stylesheet():
     
     QPushButton:disabled {
         background-color: #3a3a3a;
-        color: #7a7a7a;
+        color: #aaaaaa;
     }
     
     QProgressBar {
         border: 1px solid #444;
         border-radius: 4px;
         text-align: center;
-        height: 8px;
+        height: 20px;
     }
     
     QProgressBar::chunk {
@@ -61,15 +61,42 @@ def get_stylesheet():
     
     QScrollArea {
         border: none;
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 10px;
+        background: #1a1a1a;
+        border-radius: 8px;
     }
     
     QLabel#lyricsDisplay {
-        font-size: 22px;
-        color: #ffffff;
-        margin: 15px;
-        padding: 20px;
-        line-height: 1.4;
+        font-size: 24px;
+        color: white;
+        margin: 10px;
+        padding: 15px;
+        line-height: 1.6;
+        background-color: #1a1a1a;
+    }
+    
+    QPushButton[text^="🎤"] {
+        min-width: 100px;
+        padding: 8px 10px;
+    }
+    
+    QPushButton[text^="🎤"]:checked {
+        background-color: #4CAF50;
+        border: 1px solid #3a8f3d;
+    }
+    
+    QPushButton[text^="▶"], 
+    QPushButton[text^="⏸"], 
+    QPushButton[text^="⏹"] {
+        font-size: 16px;
+    }
+    
+    /* Estilo para la barra de progreso de la canción */
+    #songProgress {
+        height: 8px;
+        text-align: center;
+    }
+    
+    #songProgress::chunk {
+        background-color: #4CAF50;
     }
     """

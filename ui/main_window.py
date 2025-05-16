@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (QMainWindow, QVBoxLayout, QWidget, QLabel,
                            QPushButton, QProgressBar, QHBoxLayout, QFileDialog,
                            QScrollArea, QMessageBox, QButtonGroup)
 from PyQt5.QtCore import Qt, pyqtSignal, QUrl, QTimer
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QIcon
 from PyQt5.QtMultimedia import QMediaPlayer
 from pathlib import Path
 from core.audio_processor import AudioProcessor
@@ -18,6 +18,17 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Lyraoke-IA - Karaoke con IA")
+
+        icon_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            '..', 
+            'resources', 
+            'lyraoke-icon.ico'
+        )
+    
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+
         self.setAcceptDrops(True)
         self.setMinimumSize(800, 600)
         
@@ -28,10 +39,24 @@ class MainWindow(QMainWindow):
         self.original_path = None
         self.vocals_path = None
         self.instrumental_path = None
-        self.duration_ms = 0  # Nueva variable para almacenar la duración
+        self.duration_ms = 0
         
         self.init_ui()
         self.init_connections()
+
+    def set_icon_from_svg(self, svg_path):
+        """Carga un icono SVG y lo establece para la ventana"""
+        if os.path.exists(svg_path):
+            try:
+                renderer = QSvgRenderer(svg_path)
+                pixmap = QPixmap(64, 64)
+                pixmap.fill(Qt.transparent)
+                painter = QPainter(pixmap)
+                renderer.render(painter)
+                painter.end()
+                self.setWindowIcon(QIcon(pixmap))
+            except Exception as e:
+                print(f"Error cargando icono SVG: {e}")
 
     def init_ui(self):
         main_widget = QWidget()
@@ -95,17 +120,23 @@ class MainWindow(QMainWindow):
         self.song_progress.setStyleSheet("""
             QProgressBar {
                 border: 1px solid #555;
-                border-radius: 5px;
-                background-color: #333;
+                border-radius: 6px;
+                background-color: #cfcfcf;  /* Gris claro casi blanco */
                 text-align: center;
-                color: white;
-                height: 25px;
-                font-size: 14px;
+                color: black;  /* Timer en negro */
+                height: 22px;
+                font-size: 13px;
+                font-weight: bold;
             }
             QProgressBar::chunk {
-                background-color: #3b8cff;
+                background-color: qlineargradient(
+                    spread:pad, x1:0, y1:0.5, x2:1, y2:0.5, 
+                    stop:0 #4facfe, stop:1 #00f2fe
+                );
+                border-radius: 4px;
             }
         """)
+
         layout.addWidget(self.song_progress)
 
         # Área de letras con scroll
@@ -315,20 +346,63 @@ class MainWindow(QMainWindow):
         return f"{minutes:02}:{seconds:02}"
 
     def update_lyrics_display(self, current_word, current_time, context_lines):
+        """Muestra solo la línea activa con resaltado de palabra actual"""
         if not context_lines:
+            self.lyrics_display.setText("")
             return
-            
-        html_content = "<div style='text-align: center; font-family: Arial;'>"
         
+        # Convertir tiempo a segundos si viene en ms
+        current_time_sec = current_time / 1000 if isinstance(current_time, (int, float)) and current_time > 1000 else current_time
+        
+        # Buscar la línea activa actual
+        active_line = None
         for line in context_lines:
-            if current_word.lower() in line.lower():  # Línea actual
-                highlighted = line.replace(
-                    current_word, 
-                    f"<span style='color: #4CAF50; font-weight: bold; font-size: 24px;'>{current_word}</span>"
-                )
-                html_content += f"<div style='margin: 10px 0; font-size: 22px;'>{highlighted}</div>"
-            else:  # Líneas de contexto
-                html_content += f"<div style='margin: 5px 0; font-size: 20px; opacity: 0.8;'>{line}</div>"
+            if isinstance(line, dict) and 'start' in line and 'end' in line:
+                if line['start'] <= current_time_sec <= line['end']:
+                    active_line = line
+                    break
+            elif isinstance(line, str):
+                # Fallback para formato antiguo
+                if current_word.lower() in line.lower():
+                    active_line = line
+                    break
+        
+        if not active_line:
+            self.lyrics_display.setText("<div style='text-align: center; color: #888;'>---</div>")
+            return
+        
+        # Procesar la línea activa
+        html_content = "<div style='text-align: center; font-family: Arial; line-height: 1.8;'>"
+        
+        if isinstance(active_line, dict) and 'words' in active_line:
+            # Línea con timing de palabras
+            line_html = ""
+            for word_info in active_line['words']:
+                word = word_info.get('word', '')
+                start = word_info.get('start', 0)
+                end = word_info.get('end', 0)
+                
+                # Resaltar solo la palabra que está sonando ahora
+                if start <= current_time_sec <= end:
+                    line_html += f"""
+                    <span style='
+                        color: #4CAF50;
+                        font-weight: bold;
+                        font-size: 24px;
+                        background-color: rgba(76, 175, 80, 0.2);
+                        border-radius: 4px;
+                        padding: 0 2px;
+                    '>{word}</span>
+                    """
+                else:
+                    line_html += f"<span style='font-size: 22px;'>{word}</span>"
+            
+            html_content += f"<div style='margin: 10px 0;'>{line_html}</div>"
+        else:
+            # Línea de texto simple (formato antiguo)
+            parts = str(active_line).split(current_word)
+            highlighted = f"{parts[0]}<span style='color: #4CAF50; font-weight: bold; font-size: 24px;'>{current_word}</span>{current_word.join(parts[1:])}"
+            html_content += f"<div style='margin: 10px 0; font-size: 22px;'>{highlighted}</div>"
         
         self.lyrics_display.setText(html_content + "</div>")
 

@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
         self.original_path = None
         self.vocals_path = None
         self.instrumental_path = None
+        self.duration_ms = 0  # Nueva variable para almacenar la duración
         
         self.init_ui()
         self.init_connections()
@@ -50,7 +51,7 @@ class MainWindow(QMainWindow):
         self.select_btn = QPushButton("Seleccionar Archivo")
         layout.addWidget(self.select_btn)
         
-        # Barra de progreso
+        # Barra de progreso de separación
         self.progress_bar = QProgressBar()
         self.progress_bar.hide()
         layout.addWidget(self.progress_bar)
@@ -61,14 +62,14 @@ class MainWindow(QMainWindow):
         self.pause_btn = QPushButton("⏸ Pause")
         self.stop_btn = QPushButton("⏹ Stop")
         
-        # Botones de modo (MANTENIENDO TUS BOTONES ORIGINALES)
+        # Botones de modo
         self.original_btn = QPushButton("🎤 Original")
         self.acapella_btn = QPushButton("🎤 Acapella")
         self.karaoke_btn = QPushButton("🎤 Karaoke")
         
         # Configurar botones (inicialmente deshabilitados)
         for btn in [self.play_btn, self.pause_btn, self.stop_btn, 
-                   self.original_btn, self.acapella_btn, self.karaoke_btn]:
+                    self.original_btn, self.acapella_btn, self.karaoke_btn]:
             btn.setEnabled(False)
         
         # Agrupar botones de modo
@@ -78,7 +79,7 @@ class MainWindow(QMainWindow):
             btn.setCheckable(True)
         self.karaoke_btn.setChecked(True)  # Modo karaoke por defecto
         
-        # Añadir a layout
+        # Añadir a layout de controles
         controls_layout.addWidget(self.play_btn)
         controls_layout.addWidget(self.pause_btn)
         controls_layout.addWidget(self.stop_btn)
@@ -87,11 +88,26 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.karaoke_btn)
         layout.addLayout(controls_layout)
         
-        # Barra de progreso de la canción
+        # Barra de progreso de la canción con timer encima
         self.song_progress = QProgressBar()
-        self.song_progress.setTextVisible(False)
+        self.song_progress.setTextVisible(True)
+        self.song_progress.setFormat("0:00 / 0:00")  # Formato inicial
+        self.song_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #555;
+                border-radius: 5px;
+                background-color: #333;
+                text-align: center;
+                color: white;
+                height: 25px;
+                font-size: 14px;
+            }
+            QProgressBar::chunk {
+                background-color: #3b8cff;
+            }
+        """)
         layout.addWidget(self.song_progress)
-        
+
         # Área de letras con scroll
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -120,6 +136,7 @@ class MainWindow(QMainWindow):
         
         # Conexiones del reproductor
         self.player.positionChanged.connect(self.update_song_progress)
+        self.player.durationChanged.connect(self.update_duration)  # Nueva conexión
         self.player.lyrics_updated.connect(self.update_lyrics_display)
         self.player.stateChanged.connect(self.update_buttons_state)
 
@@ -238,14 +255,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "El archivo está vacío")
             return
 
-        # Intentar carga con reintentos
-        for attempt in range(3):
-            if self.player.load_audio(self.current_audio_path):
-                self.player.play()
+        # Solo cargar audio si no hay media cargada o se ha cambiado de archivo
+        current_media = self.player.media()
+        if not current_media or current_media.canonicalUrl().toLocalFile() != self.current_audio_path:
+            if not self.player.load_audio(self.current_audio_path):
+                QMessageBox.warning(self, "Error", "No se pudo cargar el archivo de audio")
                 return
-            time.sleep(0.5)
-        
-        QMessageBox.warning(self, "Error", "No se pudo cargar el archivo después de 3 intentos")
+
+        self.player.play()  # Solo play, sin recargar
 
     def update_buttons_state(self, state=None):
         """Actualizar estado de los botones según el estado del reproductor"""
@@ -271,10 +288,31 @@ class MainWindow(QMainWindow):
         if not path.exists():
             raise FileNotFoundError(f"No se encontró el archivo: {path}")
         return path
+    
+    def update_duration(self, duration_ms):
+        """Actualizar la duración total de la canción"""
+        self.duration_ms = duration_ms
+        self.update_song_progress(self.player.position())
 
-    def update_song_progress(self, position):
-        if self.player.duration() > 0:
-            self.song_progress.setValue(int((position / self.player.duration()) * 100))
+    def update_song_progress(self, position_ms):
+        """Actualizar el progreso de la canción (ahora solo recibe position_ms)"""
+        if self.duration_ms > 0:
+            progress = int((position_ms / self.duration_ms) * 100)
+            self.song_progress.setValue(progress)
+            
+            # Convertir milisegundos a minutos:segundos
+            current_min, current_sec = divmod(position_ms // 1000, 60)
+            total_min, total_sec = divmod(self.duration_ms // 1000, 60)
+            
+            # Formatear el tiempo como "mm:ss / mm:ss"
+            time_format = f"{current_min}:{current_sec:02d} / {total_min}:{total_sec:02d}"
+            self.song_progress.setFormat(time_format)
+
+    def _format_time(self, ms):
+        seconds = int(ms / 1000)
+        minutes = seconds // 60
+        seconds = seconds % 60
+        return f"{minutes:02}:{seconds:02}"
 
     def update_lyrics_display(self, current_word, current_time, context_lines):
         if not context_lines:

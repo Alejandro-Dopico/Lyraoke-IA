@@ -13,31 +13,31 @@ def resource_path(relative_path):
 def main():
     app = QApplication(sys.argv)
     
-    # 1. Aplicar estilos (esto debe ir primero)
+    # Aplicar estilo y stylesheet
     app.setStyle('Fusion')
     app.setStyleSheet(get_stylesheet())
     
-    # 2. Cargar icono desde la carpeta resources/ (ahora PNG)
-    icon_path = resource_path('resources/lyraoke-icon.png')
+    # Icono
+    if sys.platform.startswith("win"):
+        icon_filename = "resources/lyraoke-icon.ico"  # Usar .ico en Windows
+    else:
+        icon_filename = "resources/lyraoke-icon.png"  # Usar .png en otros sistemas
+
+    icon_path = resource_path(icon_filename)
     print(f"Intentando cargar icono desde: {icon_path}")
-    
+
     if os.path.exists(icon_path):
         icon = QIcon(icon_path)
         app.setWindowIcon(icon)
-        print("Icono cargado correctamente")
     else:
         print(f"¡Error! No se encontró el icono en: {icon_path}")
     
-    # 3. Crear y mostrar ventana principal
     window = MainWindow()
-    
-    # En Linux ayuda setear también el icono en la ventana directamente
-    if os.path.exists(icon_path):
-        window.setWindowIcon(icon)
-    
+    window.setWindowIcon(icon)
     window.show()
     
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()

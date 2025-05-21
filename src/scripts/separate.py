@@ -4,48 +4,88 @@ from pathlib import Path
 import logging
 import os
 import shutil
-from typing import Dict, Optional, Union, Tuple
-from src.libs.demucs_mdx.model_utils import load_model
+from typing import Dict, Optional, Union
+from demucs.pretrained import get_model  # Para el modelo preentrenado
 from demucs.apply import apply_model
 from src.utils.audio_utils import (
     convert_to_wav,
     normalize_audio,
-    save_audio  # Nueva función importada
+    save_audio
 )
 
-# Configuración básica
+# Configuración
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Rutas fijas
 BASE_DIR = Path(__file__).parent.parent.parent
 SONGS_DIR = BASE_DIR / "output" / "original"
 OUTPUT_DIR = BASE_DIR / "output" / "stems"
 MODEL_PATH = BASE_DIR / "models" / "final_model" / "best_model.pth"
 
+def load_custom_model(model_path: Union[str, Path], device: torch.device):
+    """Carga el modelo custom manteniendo compatibilidad con diferentes formatos de state_dict"""
+    try:
+        logger.info(f"Intentando cargar modelo custom: {model_path}")
+        
+        # 1. Cargar state_dict
+        state_dict = torch.load(model_path, map_location=device)
+        
+        # 2. Cargar arquitectura base
+        model = get_model('htdemucs').models[0]
+        
+        # 3. Compatibilidad con nombres de parámetros
+        # Caso 1: State_dict con prefijo 'models.0.' (BagOfModels)
+        if any(k.startswith('models.0.') for k in state_dict.keys()):
+            state_dict = {k.replace('models.0.', ''): v for k, v in state_dict.items()}
+        
+        # Caso 2: State_dict con prefijo 'model.' (algunas versiones)
+        elif any(k.startswith('model.') for k in state_dict.keys()):
+            state_dict = {k.replace('model.', ''): v for k, v in state_dict.items()}
+        
+        # 4. Cargar pesos (con manejo de errores detallado)
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+        
+        if missing_keys:
+            logger.warning(f"Claves faltantes en state_dict: {missing_keys[:3]}... (total: {len(missing_keys)})")
+        if unexpected_keys:
+            logger.warning(f"Claves inesperadas en state_dict: {unexpected_keys[:3]}... (total: {len(unexpected_keys)})")
+        
+        model.to(device)
+        
+        # Verificación final
+        if len(missing_keys) > len(model.state_dict().keys()) / 2:  # Si faltan más del 50%
+            raise ValueError("El state_dict no coincide con la arquitectura del modelo")
+            
+        logger.info("✅ Modelo custom cargado correctamente")
+        return model
+        
+    except Exception as e:
+        logger.error(f"Error al cargar modelo custom: {str(e)}")
+        logger.info("🔄 Cargando modelo preentrenado como fallback...")
+        
+        model = get_model('htdemucs')
+        if hasattr(model, 'models'):
+            model = model.models[0]
+        model.to(device)
+        
+        return model
+
 def get_first_song() -> str:
-    """Obtiene el primer archivo de audio de la carpeta songs"""
+    """Obtiene el primer archivo de audio disponible"""
     for ext in ['*.wav', '*.mp3', '*.flac']:
         songs = list(SONGS_DIR.glob(ext))
         if songs:
             return songs[0].name
-    raise FileNotFoundError(f"No se encontraron archivos de audio en {SONGS_DIR}")
+    raise FileNotFoundError(f"No se encontraron archivos en {SONGS_DIR}")
 
 def ensure_proper_shape(audio: torch.Tensor) -> torch.Tensor:
-    """
-    Garantiza que el tensor de audio tenga la forma correcta (2D: canales × muestras)
-    - Elimina dimensión batch si existe
-    - Convierte mono a estéreo si es necesario
-    """
-    if audio.dim() == 3:  # (batch, channels, samples)
+    """Garantiza la forma correcta del tensor de audio"""
+    if audio.dim() == 3:
         audio = audio.squeeze(0)
-    elif audio.dim() == 1:  # (samples)
+    elif audio.dim() == 1:
         audio = audio.unsqueeze(0)
-    
-    # Convertir mono a estéreo si es necesario
     if audio.shape[0] == 1:
         audio = torch.cat([audio, audio])
-    
     return audio
 
 def separate_audio(
@@ -53,63 +93,45 @@ def separate_audio(
     output_dir: Union[str, Path] = OUTPUT_DIR,
     model_path: Union[str, Path] = MODEL_PATH
 ) -> Dict[str, str]:
-    """
-    Versión corregida con manejo robusto de rutas y procesamiento de audio
-    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Convertir todas las rutas a objetos Path
-    input_path = Path(input_path) if input_path else None
     output_dir = Path(output_dir)
     model_path = Path(model_path)
     
     temp_file = None
     try:
-        # 1. Manejo de la ruta de entrada
+        # Manejo de la ruta de entrada
         if input_path is None:
             input_filename = get_first_song()
             input_path = SONGS_DIR / input_filename
-        elif not input_path.is_absolute():
-            if str(input_path).startswith("songs/"):
-                input_path = BASE_DIR / input_path
-            else:
+        else:
+            input_path = Path(input_path)
+            if not input_path.is_absolute():
                 input_path = SONGS_DIR / input_path.name
-        
-        # Verificación final de la ruta
+
         if not input_path.exists():
-            available_files = "\n".join(f"- {f.name}" for f in SONGS_DIR.iterdir() if f.is_file())
-            raise FileNotFoundError(
-                f"Archivo no encontrado: {input_path}\n"
-                f"Archivos disponibles en {SONGS_DIR}:\n{available_files}"
-            )
+            available = "\n".join(f"- {f.name}" for f in SONGS_DIR.iterdir() if f.is_file())
+            raise FileNotFoundError(f"Archivo no encontrado. Disponibles:\n{available}")
 
         original_name = input_path.stem
-        logger.info(f"Procesando archivo: {input_path}")
+        logger.info(f"Procesando: {input_path}")
 
-        # 2. Conversión a WAV si es necesario
+        # Conversión a WAV si es necesario
         if input_path.suffix.lower() != '.wav':
             logger.info("Convirtiendo a WAV...")
-            try:
-                audio_path_str, temp_file = convert_to_wav(input_path)
-                audio_path = Path(audio_path_str)
-                logger.info(f"Archivo WAV temporal creado: {temp_file}")
-            except Exception as e:
-                raise RuntimeError(f"Error en conversión a WAV: {str(e)}")
+            audio_path_str, temp_file = convert_to_wav(input_path)
+            audio_path = Path(audio_path_str)
         else:
             audio_path = input_path
 
-        # 3. Carga del archivo de audio
-        logger.info("Cargando archivo de audio...")
+        # Carga del audio
+        logger.info("Cargando audio...")
         try:
-            if audio_path.suffix.lower() == '.wav':
-                mix, sr = torchaudio.load(str(audio_path), backend="soundfile")
-            else:
-                mix, sr = torchaudio.load(str(audio_path))
+            mix, sr = torchaudio.load(str(audio_path), backend="soundfile")
         except Exception as e:
-            raise RuntimeError(f"Error al cargar el audio: {str(e)}")
+            raise RuntimeError(f"Error al cargar audio: {str(e)}")
 
-        # 4. Preprocesamiento
-        logger.info("Preprocesando audio...")
+        # Preprocesamiento
+        logger.info("Preprocesando...")
         target_sr = 44100
         
         if sr != target_sr:
@@ -117,47 +139,35 @@ def separate_audio(
             mix = torchaudio.functional.resample(mix, sr, target_sr)
         
         mix = normalize_audio(mix)
-        mix = ensure_proper_shape(mix).unsqueeze(0)  # Añadir dimensión batch
+        mix = ensure_proper_shape(mix).unsqueeze(0)
 
-        # 5. Carga del modelo
-        logger.info(f"Cargando modelo: {model_path}")
-        try:
-            model = load_model(str(model_path), device)
-            if isinstance(model, tuple):
-                model = model[0]
-        except Exception as e:
-            logger.warning(f"Intento alternativo de carga del modelo: {str(e)}")
-            model = load_model(str(model_path), device)
-            if isinstance(model, tuple):
-                model = model[0]
-
-        # Mover modelo al dispositivo
+        # Carga del modelo (primero custom, luego preentrenado como fallback)
+        model = load_custom_model(model_path, device)
         model.to(device)
 
-        # 6. Separación
+        # Separación
         logger.info("Separando pistas...")
         stems = apply_model(model, mix.to(device), split=True, overlap=0.25)
 
-        # 7. Preparar stems para guardar
-        instrumental = stems[:, :3].sum(1)  # Sumar primeros 3 stems
-        vocals = stems[:, 3]  # Tomar stem de vocales
+        # Preparar stems
+        instrumental = stems[:, :3].sum(1)  # Sumar drums, bass, other
+        vocals = stems[:, 3]  # Vocales
 
-        # Asegurar formas correctas
+        # Asegurar formas
         instrumental = ensure_proper_shape(instrumental.cpu())
         vocals = ensure_proper_shape(vocals.cpu())
 
-        # 8. Guardar resultados usando la función segura de audio_utils
+        # Guardar resultados
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Limpiar archivos antiguos
         for old_file in output_dir.glob("*.wav"):
             old_file.unlink(missing_ok=True)
 
-        # Rutas de salida
+        # Rutas de salida con nombre original
         instrumental_path = output_dir / "instrumental.wav"
         vocals_path = output_dir / "vocals.wav"
 
-        # Usar la nueva función save_audio de audio_utils
         save_audio(instrumental, instrumental_path, target_sr)
         save_audio(vocals, vocals_path, target_sr)
 
@@ -169,9 +179,7 @@ def separate_audio(
             "vocals": str(vocals_path),
             "instrumental": str(instrumental_path),
             "output_dir": str(output_dir),
-            "sample_rate": target_sr,
-            "original_name": original_name,
-            "input_path": str(input_path)
+            "model_used": "custom" if "custom" in str(model_path) else "pretrained"
         }
 
     except Exception as e:
@@ -179,48 +187,43 @@ def separate_audio(
         raise
 
     finally:
-        # Limpieza segura de archivos temporales
         if temp_file and os.path.exists(temp_file):
             try:
-                if os.path.isfile(temp_file):
-                    os.remove(temp_file)
-                elif os.path.isdir(temp_file):
-                    shutil.rmtree(temp_file)
+                os.remove(temp_file)
             except Exception as e:
-                logger.warning(f"No se pudo eliminar archivo temporal: {str(e)}")
+                logger.warning(f"No se pudo eliminar temporal: {str(e)}")
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(
-        description='Separación automática de la primera canción encontrada en /songs',
+        description='Separador de audio con prioridad a modelo fine-tuned',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
         "--input",
         default=None,
-        help="Nombre específico del archivo en /songs (opcional)"
+        help="Ruta al archivo de entrada (opcional)"
     )
     parser.add_argument(
         "--output",
         default=OUTPUT_DIR,
         type=Path,
-        help="Carpeta de salida (por defecto /output/stems)"
+        help="Directorio de salida"
     )
     parser.add_argument(
         "--model",
         default=MODEL_PATH,
         type=Path,
-        help="Ruta al modelo preentrenado"
+        help="Ruta al modelo fine-tuned (por defecto best_model.pth)"
     )
     
     args = parser.parse_args()
     
     try:
         result = separate_audio(args.input, args.output, args.model)
-        print("Procesamiento exitoso. Resultados:")
+        print(f"Procesamiento exitoso (modelo: {result['model_used']})")
         print(f"Vocales: {result['vocals']}")
         print(f"Instrumental: {result['instrumental']}")
-        exit(0)
     except Exception as e:
         print(f"Error: {str(e)}")
         exit(1)

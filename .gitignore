@@ -10,13 +10,22 @@ models/final_model/*
 models/fine_tuned/*
 !models/fine_tuned/.gitkeep
 
-output/*
-!output/.gitkeep
+models/whisper/*
+!models/whisper/.gitkeep
+
+output/lyrics/*
+!output/lyrics/.gitkeep
+
+output/original/*
+!output/original/.gitkeep
+
+output/stems/*
+!output/stems/.gitkeep
 
 songs/*
 !songs/.gitkeep
 
-whisper/
+/launch.sh
 
 # Ignorar archivos de entornos virtuales
 venv_lyraoke/

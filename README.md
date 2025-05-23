@@ -1,5 +1,5 @@
 
-# Lyraoke: Sistema de Karaoke en Tiempo Real con IA 🎤🤖
+# Lyraoke: Karaoke en Tiempo Real con IA 🎤🤖
 
 Lyraoke es una aplicación innovadora que combina técnicas avanzadas de separación de fuentes musicales (HTDemucs) y reconocimiento automático de voz (Whisper) para crear una experiencia de karaoke automatizada en tiempo real.
 

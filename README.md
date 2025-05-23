@@ -104,12 +104,3 @@ Si usas Lyraoke en tu investigación, por favor cita:
 
 Este proyecto está bajo la licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
 ```
-
-### Recomendaciones adicionales:
-
-1. Añade capturas de pantalla reales de la aplicación en funcionamiento (reemplaza el placeholder)
-2. Incluye un GIF breve mostrando el flujo de trabajo
-3. Agrega una sección de "FAQ" si recibes preguntas frecuentes de usuarios
-4. Considera añadir badges de estado (build, version, etc.) cuando el proyecto crezca
-
-El README presenta tu proyecto de manera profesional, destacando sus aspectos técnicos innovadores mientras mantiene instrucciones claras para que los usuarios puedan probarlo fácilmente.

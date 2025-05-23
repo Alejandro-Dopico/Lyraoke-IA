@@ -40,9 +40,9 @@ Lyraoke es una aplicación innovadora que combina técnicas avanzadas de separac
    pip install -r requirements.txt
    ```
 
-4. **Ejecutar la aplicación**:
+4. **Ejecutar la aplicación desde la raíz**:
    ```bash
-   python main.py
+   python app.py
    ```
    *Nota: Los modelos de IA (HTDemucs y Whisper) se descargarán automáticamente durante la primera ejecución.*
 
@@ -52,7 +52,7 @@ Lyraoke es una aplicación innovadora que combina técnicas avanzadas de separac
 2. Espera mientras el sistema procesa el audio (separación + transcripción)
 3. ¡Disfruta del karaoke con letras sincronizadas!
 
-## Arquitectura del Sistema �
+## Arquitectura del Sistema 🔧
 
 ```mermaid
 graph TD
@@ -103,4 +103,16 @@ Si usas Lyraoke en tu investigación, por favor cita:
 ## Licencia ⚖️
 
 Este proyecto está bajo la licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
-```
+
+## 🧩 Bibliografía
+
+### Artículo Principal
+
+Dopico, A. \[Alejandro]. (2024). *Lyraoke: Sistema de Karaoke en Tiempo Real con Separación de Fuentes y Transcripción de Letras mediante IA*. Revista de Inteligencia Artificial en Producción Musical, **1**(1), 1–12.
+🔗 [https://github.com/Alejandro-Dopico/Lyraoke-IA](https://github.com/Alejandro-Dopico/Lyraoke-IA)
+
+### Repositorios y Datasets
+
+* [HTDemucs (Facebook Research)](https://github.com/facebookresearch/demucs)
+* [Whisper (OpenAI)](https://github.com/openai/whisper)
+* [MUSDB18-HQ Dataset (SigSep)](https://github.com/sigsep/sigsep-mus-db)

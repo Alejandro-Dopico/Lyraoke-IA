@@ -11,6 +11,8 @@ Lyraoke es una aplicación innovadora que combina técnicas avanzadas de separac
 - � Adaptación especial para música en español mediante fine-tuning
 - 🖥️ Interfaz intuitiva para una experiencia de usuario fluida
 
+<img src="resources/lyraoke.gif" alt="Lyraoke Demo" width="800"/>
+
 ## Instalación y Ejecución 🛠️
 
 ### Requisitos previos

@@ -1,9 +1,5 @@
-Aquí tienes un `README.md` profesional para tu proyecto Lyraoke-IA:
 
-```markdown
 # Lyraoke: Sistema de Karaoke en Tiempo Real con IA 🎤🤖
-
-![Lyraoke Demo](https://via.placeholder.com/800x400?text=Lyraoke+Demo+Screen) <!-- Reemplazar con imagen real -->
 
 Lyraoke es una aplicación innovadora que combina técnicas avanzadas de separación de fuentes musicales (HTDemucs) y reconocimiento automático de voz (Whisper) para crear una experiencia de karaoke automatizada en tiempo real.
 
